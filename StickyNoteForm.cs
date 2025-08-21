@@ -23,10 +23,9 @@ namespace Post_it
         private System.Windows.Forms.Timer? autoSaveTimer;
         private ToolStripMenuItem? menuOpacity;
 
-        // Variables para el arrastre
+        // Variables para el arrastre mejoradas
         private bool isDragging = false;
-        private Point lastCursor;
-        private Point lastForm;
+        private Point dragStartPoint;
 
         public event EventHandler? NoteSaved;
         public event EventHandler? NoteDeleted;
@@ -42,7 +41,7 @@ namespace Post_it
         private void InitializeComponents()
         {
             this.FormBorderStyle = FormBorderStyle.None;
-            this.TopMost = false; // Cambiado a false para que no esté siempre encima
+            this.TopMost = false;
             this.StartPosition = FormStartPosition.Manual;
             this.Size = new Size(250, 200);
             this.BackColor = Color.Yellow;
@@ -50,7 +49,7 @@ namespace Post_it
 
             // Auto-save timer
             autoSaveTimer = new System.Windows.Forms.Timer();
-            autoSaveTimer.Interval = 2000; // Auto-guardar cada 2 segundos
+            autoSaveTimer.Interval = 2000;
             autoSaveTimer.Tick += AutoSaveTimer_Tick;
 
             txtTitle = new TextBox { 
@@ -91,13 +90,15 @@ namespace Post_it
             txtTitle.TextChanged += TxtText_TextChanged;
             trackOpacity.Scroll += TrackOpacity_Scroll;
 
-            // Permitir arrastrar la ventana
+            // Configurar eventos de arrastre para el formulario
             this.MouseDown += StickyNoteForm_MouseDown;
             this.MouseMove += StickyNoteForm_MouseMove;
             this.MouseUp += StickyNoteForm_MouseUp;
-            txtTitle.MouseDown += StickyNoteForm_MouseDown;
-            txtTitle.MouseMove += StickyNoteForm_MouseMove;
-            txtTitle.MouseUp += StickyNoteForm_MouseUp;
+
+            // Configurar eventos de arrastre para el título (área de arrastre principal)
+            txtTitle.MouseDown += Title_MouseDown;
+            txtTitle.MouseMove += Title_MouseMove;
+            txtTitle.MouseUp += Title_MouseUp;
 
             // Context menu mejorado
             contextMenu = new ContextMenuStrip();
@@ -133,18 +134,94 @@ namespace Post_it
             tablePanel.BackColor = Color.Transparent;
             tablePanel.ContextMenuStrip = contextMenu;
 
-            // Comentar o eliminar el panel de opacidad para ocultarlo
-            // var opacityPanel = new Panel { Dock = DockStyle.Bottom, Height = 25, BackColor = Color.Transparent };
-            // opacityPanel.Controls.Add(trackOpacity);
-            // opacityPanel.Controls.Add(lblOpacity);
-            // opacityPanel.ContextMenuStrip = contextMenu;
+            // También permitir arrastrar desde el panel
+            tablePanel.MouseDown += StickyNoteForm_MouseDown;
+            tablePanel.MouseMove += StickyNoteForm_MouseMove;
+            tablePanel.MouseUp += StickyNoteForm_MouseUp;
 
             Controls.Add(tablePanel);
-            // Controls.Add(opacityPanel); // Comentado para ocultar la barra
 
             // Atajos de teclado
             this.KeyPreview = true;
             this.KeyDown += StickyNoteForm_KeyDown;
+        }
+
+        // Eventos de arrastre para el área del título
+        private void Title_MouseDown(object? sender, MouseEventArgs e)
+        {
+            if (e.Button == MouseButtons.Left && !txtTitle!.Focused)
+            {
+                StartDrag(e);
+            }
+        }
+
+        private void Title_MouseMove(object? sender, MouseEventArgs e)
+        {
+            if (isDragging)
+            {
+                MoveDrag(e);
+            }
+        }
+
+        private void Title_MouseUp(object? sender, MouseEventArgs e)
+        {
+            if (e.Button == MouseButtons.Left)
+            {
+                EndDrag();
+            }
+        }
+
+        // Eventos de arrastre para el formulario
+        private void StickyNoteForm_MouseDown(object? sender, MouseEventArgs e)
+        {
+            if (e.Button == MouseButtons.Left)
+            {
+                StartDrag(e);
+            }
+        }
+
+        private void StickyNoteForm_MouseMove(object? sender, MouseEventArgs e)
+        {
+            if (isDragging)
+            {
+                MoveDrag(e);
+            }
+        }
+
+        private void StickyNoteForm_MouseUp(object? sender, MouseEventArgs e)
+        {
+            if (e.Button == MouseButtons.Left)
+            {
+                EndDrag();
+            }
+        }
+
+        // Métodos auxiliares para el arrastre
+        private void StartDrag(MouseEventArgs e)
+        {
+            isDragging = true;
+            dragStartPoint = new Point(e.X, e.Y);
+            this.Cursor = Cursors.SizeAll;
+        }
+
+        private void MoveDrag(MouseEventArgs e)
+        {
+            if (isDragging)
+            {
+                Point screenPoint = this.PointToScreen(new Point(e.X, e.Y));
+                this.Location = new Point(screenPoint.X - dragStartPoint.X, screenPoint.Y - dragStartPoint.Y);
+            }
+        }
+
+        private void EndDrag()
+        {
+            if (isDragging)
+            {
+                isDragging = false;
+                this.Cursor = Cursors.Default;
+                // Guardar la nueva posición automáticamente
+                SaveNote();
+            }
         }
 
         private void ApplyData()
@@ -190,36 +267,6 @@ namespace Post_it
             SaveNote();
         }
 
-        private void StickyNoteForm_MouseDown(object? sender, MouseEventArgs e)
-        {
-            if (e.Button == MouseButtons.Left)
-            {
-                isDragging = true;
-                lastCursor = Cursor.Position;
-                lastForm = this.Location;
-            }
-        }
-
-        private void StickyNoteForm_MouseMove(object? sender, MouseEventArgs e)
-        {
-            if (isDragging)
-            {
-                Point currentCursor = Cursor.Position;
-                Point offset = new Point(currentCursor.X - lastCursor.X, currentCursor.Y - lastCursor.Y);
-                this.Location = new Point(lastForm.X + offset.X, lastForm.Y + offset.Y);
-            }
-        }
-
-        private void StickyNoteForm_MouseUp(object? sender, MouseEventArgs e)
-        {
-            if (e.Button == MouseButtons.Left)
-            {
-                isDragging = false;
-                // Guardar la nueva posición automáticamente
-                SaveNote();
-            }
-        }
-
         private void StickyNoteForm_KeyDown(object? sender, KeyEventArgs e)
         {
             if (e.Control && e.KeyCode == Keys.S)
@@ -261,7 +308,7 @@ namespace Post_it
                 opacityForm.FormBorderStyle = FormBorderStyle.FixedDialog;
                 opacityForm.MaximizeBox = false;
                 opacityForm.MinimizeBox = false;
-                opacityForm.TopMost = true; // Asegurar que esté por encima de todo
+                opacityForm.TopMost = true;
                 opacityForm.ShowInTaskbar = false;
 
                 var label = new Label { Text = "Opacidad (30-100%):", Location = new Point(20, 20), Size = new Size(150, 20) };
@@ -292,7 +339,6 @@ namespace Post_it
 
                 trackBar.Scroll += (s, e) => {
                     lblValue.Text = trackBar.Value + "%";
-                    // Mostrar el cambio de opacidad en tiempo real en el Post-it
                     this.Opacity = trackBar.Value / 100f;
                 };
                 
@@ -300,7 +346,6 @@ namespace Post_it
                 opacityForm.AcceptButton = btnOK;
                 opacityForm.CancelButton = btnCancel;
 
-                // Guardar opacidad original para poder restaurarla si se cancela
                 float originalOpacity = (float)this.Opacity;
 
                 var result = opacityForm.ShowDialog();
@@ -309,12 +354,10 @@ namespace Post_it
                 {
                     this.Opacity = trackBar.Value / 100f;
                     trackOpacity!.Value = trackBar.Value;
-                    // Guardar automáticamente el cambio de opacidad
                     SaveNote();
                 }
                 else
                 {
-                    // Restaurar opacidad original si se canceló
                     this.Opacity = originalOpacity;
                 }
             }
@@ -334,7 +377,6 @@ namespace Post_it
             NoteData.Location = this.Location;
             NoteData.Size = this.Size;
             
-            // Debug: Mostrar el color que se está guardando
             Console.WriteLine($"Guardando nota con color: {this.BackColor.Name} (ARGB: {this.BackColor.ToArgb()})");
             
             NoteSaved?.Invoke(this, EventArgs.Empty);
@@ -358,11 +400,10 @@ namespace Post_it
             int minHeight = 150;
             int minWidth = 220;
             
-            // Calcular tamaño basado en el contenido del texto
             var textSize = TextRenderer.MeasureText(txtText!.Text, txtText.Font);
             var titleSize = TextRenderer.MeasureText(txtTitle!.Text, txtTitle.Font);
             
-            int textHeight = Math.Max(textSize.Height, 80) + 80; // Espacio extra para título y controles
+            int textHeight = Math.Max(textSize.Height, 80) + 80;
             int textWidth = Math.Max(Math.Max(textSize.Width, titleSize.Width) + 40, minWidth);
             
             this.Size = new Size(textWidth, Math.Max(textHeight, minHeight));
@@ -370,7 +411,6 @@ namespace Post_it
 
         protected override void OnPaint(PaintEventArgs e)
         {
-            // Crear bordes redondeados
             var path = new System.Drawing.Drawing2D.GraphicsPath();
             int radius = 10;
             path.AddArc(0, 0, radius, radius, 180, 90);
