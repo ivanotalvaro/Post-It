@@ -7,11 +7,13 @@
     <Nullable>enable</Nullable>
     <UseWindowsForms>true</UseWindowsForms>
     <ImplicitUsings>enable</ImplicitUsings>
-    <!-- Configurar el icono de la aplicación -->
     <ApplicationIcon>postit.ico</ApplicationIcon>
+    <PublishSingleFile>true</PublishSingleFile>
+    <PublishTrimmed>false</PublishTrimmed>
+    <SelfContained>false</SelfContained>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
   </PropertyGroup>
 
-  <!-- Incluir el archivo de icono como contenido -->
   <ItemGroup>
     <Content Include="postit.ico">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>

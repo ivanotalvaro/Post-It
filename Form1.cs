@@ -1,391 +1,390 @@
-namespace Post_it;
+using System;
+using System.Collections.Generic;
+using System.Drawing;
+using System.IO;
+using System.Linq;
+using System.Text.Json;
+using System.Threading;
+using System.Windows.Forms;
 
-public partial class Form1 : Form
+namespace Post_it
 {
-    private const string NotesFile = "sticky_notes.json";
-    private List<StickyNoteData> notes = new List<StickyNoteData>();
-    private Button? btnNewNote;
-    private Label? lblTitle;
-    private Label? lblInfo;
-    private NotifyIcon? notifyIcon;
-    private ContextMenuStrip? trayMenu;
-    private ListBox? lstNotes;
-    private Panel? pnlBottom;
-
-    public Form1()
+    public partial class Form1 : Form
     {
-        InitializeComponent();
-        
-        // Cargar el icono para el formulario
-        try 
-        { 
-            this.Icon = new System.Drawing.Icon("postit.ico"); 
-        } 
-        catch 
-        { 
-            // Si no se encuentra el archivo externo, usar icono por defecto
-            this.Icon = SystemIcons.Application;
-        }
-        
-        this.Text = "Post-it Manager";
-        this.Size = new Size(400, 500);
-        this.StartPosition = FormStartPosition.CenterScreen;
-        this.FormBorderStyle = FormBorderStyle.FixedSingle;
-        this.MaximizeBox = false;
-        this.WindowState = FormWindowState.Minimized;
-        this.ShowInTaskbar = false;
-        
-        // Configurar NotifyIcon
-        SetupNotifyIcon();
-        
-        lblTitle = new Label { 
-            Text = "📝 Post-it Digital", 
-            Dock = DockStyle.Top, 
-            Font = new Font(FontFamily.GenericSansSerif, 14, FontStyle.Bold),
-            TextAlign = ContentAlignment.MiddleCenter,
-            Height = 40,
-            BackColor = Color.LightYellow
-        };
-        
-        btnNewNote = new Button { 
-            Text = "➕ Crear Nueva Nota", 
-            Dock = DockStyle.Top, 
-            Height = 50,
-            Font = new Font(FontFamily.GenericSansSerif, 10, FontStyle.Bold),
-            BackColor = Color.Yellow,
-            FlatStyle = FlatStyle.Flat
-        };
+        private List<StickyNoteData> notes = new List<StickyNoteData>();
+        private ListBox? lstNotes;
+        private Button? btnNewNote;
+        private Button? btnNewTaskList;
+        private Button? btnDeleteNote;
+        private NotifyIcon? notifyIcon;
+        private ContextMenuStrip? trayMenu;
 
-        // Panel inferior para info y lista de notas
-        pnlBottom = new Panel { Dock = DockStyle.Fill };
-        
-        lblInfo = new Label { 
-            Text = "• Doble clic en una nota para abrirla\n• Clic derecho para opciones", 
-            Dock = DockStyle.Top,
-            Font = new Font(FontFamily.GenericSansSerif, 9),
-            Padding = new Padding(10),
-            BackColor = Color.WhiteSmoke,
-            Height = 50
-        };
-
-        lstNotes = new ListBox { 
-            Dock = DockStyle.Fill,
-            Font = new Font(FontFamily.GenericSansSerif, 9),
-            BackColor = Color.White,
-            BorderStyle = BorderStyle.FixedSingle
-        };
-        
-        btnNewNote.Click += BtnNewNote_Click;
-        lstNotes.DoubleClick += LstNotes_DoubleClick;
-        lstNotes.MouseDown += LstNotes_MouseDown;
-        
-        pnlBottom.Controls.Add(lstNotes);
-        pnlBottom.Controls.Add(lblInfo);
-        
-        Controls.Add(pnlBottom);
-        Controls.Add(btnNewNote);
-        Controls.Add(lblTitle);
-        
-        LoadNotes();
-        UpdateNotesList();
-        
-        // Mostrar las notas existentes automáticamente al iniciar
-        ShowExistingNotes();
-    }
-
-    private void SetupNotifyIcon()
-    {
-        // Crear menú contextual para el icono de la bandeja
-        trayMenu = new ContextMenuStrip();
-        trayMenu.Items.Add("Nueva Nota", null, BtnNewNote_Click);
-        trayMenu.Items.Add("Mostrar/Ocultar", null, ToggleWindow_Click);
-        trayMenu.Items.Add(new ToolStripSeparator());
-        trayMenu.Items.Add("Salir", null, Exit_Click);
-
-        // Configurar NotifyIcon con el mismo icono del formulario
-        notifyIcon = new NotifyIcon();
-        notifyIcon.Icon = this.Icon;
-        notifyIcon.Text = "Post-it Digital - Haz clic para abrir";
-        notifyIcon.Visible = true;
-        notifyIcon.ContextMenuStrip = trayMenu;
-        notifyIcon.DoubleClick += ToggleWindow_Click;
-    }
-
-    private void ShowExistingNotes()
-    {
-        // Mostrar todas las notas existentes al iniciar la aplicación
-        foreach (var note in notes)
+        public Form1()
         {
-            // Verificar que no esté ya abierta
-            var existingForm = Application.OpenForms.Cast<Form>()
-                .OfType<StickyNoteForm>()
-                .FirstOrDefault(f => f.NoteData == note);
-                
-            if (existingForm == null)
-            {
-                var noteForm = new StickyNoteForm(note);
-                noteForm.NoteSaved += NoteForm_NoteSaved;
-                noteForm.NoteDeleted += NoteForm_NoteDeleted;
-                
-                // Si la nota no tiene posición guardada, asignar una por defecto
-                if (note.Location == Point.Empty)
-                {
-                    Random rand = new Random();
-                    note.Location = new Point(
-                        rand.Next(50, Screen.PrimaryScreen.WorkingArea.Width - 300),
-                        rand.Next(50, Screen.PrimaryScreen.WorkingArea.Height - 250)
-                    );
-                }
-                
-                noteForm.Show();
-            }
-        }
-    }
-
-    private void ToggleWindow_Click(object? sender, EventArgs e)
-    {
-        if (this.WindowState == FormWindowState.Minimized || !this.Visible)
-        {
-            // Mostrar la ventana
-            this.Show();
-            this.WindowState = FormWindowState.Normal;
-            this.ShowInTaskbar = true;
-            this.BringToFront();
-            this.Activate();
-            this.Focus();
+            InitializeComponent();
+            InitializeCustomComponents();
+            LoadNotes();
+            SetupTrayIcon();
+            ShowExistingNotes();
             
-            // Forzar que la ventana aparezca al frente
-            this.TopMost = true;
-            this.TopMost = false;
-        }
-        else
-        {
-            // Ocultar la ventana
-            this.Hide();
+            // Minimizar inmediatamente al cargar
+            this.WindowState = FormWindowState.Minimized;
             this.ShowInTaskbar = false;
-        }
-    }
-
-    private void Exit_Click(object? sender, EventArgs e)
-    {
-        // Cerrar todas las notas abiertas
-        var openForms = Application.OpenForms.Cast<Form>().ToArray();
-        foreach (var form in openForms)
-        {
-            if (form is StickyNoteForm)
-            {
-                form.Close();
-            }
-        }
-        
-        // Limpiar el NotifyIcon
-        if (notifyIcon != null)
-        {
-            notifyIcon.Visible = false;
-            notifyIcon.Dispose();
-        }
-        
-        Application.Exit();
-    }
-
-    protected override void SetVisibleCore(bool value)
-    {
-        // Iniciar siempre minimizado en la bandeja
-        base.SetVisibleCore(value);
-    }
-
-    protected override void OnFormClosing(FormClosingEventArgs e)
-    {
-        if (e.CloseReason == CloseReason.UserClosing)
-        {
-            // No cerrar la aplicación, solo minimizar a la bandeja
-            e.Cancel = true;
             this.Hide();
-            this.ShowInTaskbar = false;
-            if (notifyIcon != null)
+        }
+
+        private void InitializeCustomComponents()
+        {
+            this.Text = "Post-it Digital";
+            this.Size = new Size(300, 400);
+            this.StartPosition = FormStartPosition.CenterScreen;
+
+            btnNewNote = new Button
             {
-                // Mostrar un globo informativo la primera vez
-                notifyIcon.ShowBalloonTip(3000, "Post-it Digital", 
-                    "La aplicación sigue ejecutándose en segundo plano. " +
-                    "Haz clic derecho en el icono para ver las opciones.", 
-                    ToolTipIcon.Info);
+                Text = "📝 Nueva Nota",
+                Dock = DockStyle.Top,
+                Height = 40,
+                Font = new Font(FontFamily.GenericSansSerif, 10, FontStyle.Bold),
+                BackColor = Color.LightYellow,
+                FlatStyle = FlatStyle.Flat
+            };
+            btnNewNote.Click += BtnNewNote_Click;
+
+            btnNewTaskList = new Button
+            {
+                Text = "📋 Nueva Lista de Tareas",
+                Dock = DockStyle.Top,
+                Height = 40,
+                Font = new Font(FontFamily.GenericSansSerif, 10, FontStyle.Bold),
+                BackColor = Color.LightSkyBlue,
+                FlatStyle = FlatStyle.Flat
+            };
+            btnNewTaskList.Click += BtnNewTaskList_Click;
+
+            btnDeleteNote = new Button
+            {
+                Text = "🗑️ Eliminar Seleccionada",
+                Dock = DockStyle.Bottom,
+                Height = 40,
+                Font = new Font(FontFamily.GenericSansSerif, 10, FontStyle.Bold),
+                BackColor = Color.LightCoral,
+                FlatStyle = FlatStyle.Flat
+            };
+            btnDeleteNote.Click += BtnDeleteNote_Click;
+
+            lstNotes = new ListBox
+            {
+                Dock = DockStyle.Fill,
+                Font = new Font(FontFamily.GenericSansSerif, 9)
+            };
+            lstNotes.DoubleClick += LstNotes_DoubleClick;
+
+            Controls.Add(lstNotes);
+            Controls.Add(btnDeleteNote);
+            Controls.Add(btnNewTaskList);
+            Controls.Add(btnNewNote);
+
+            UpdateNotesList();
+        }
+
+        protected override void SetVisibleCore(bool value)
+        {
+            // Evitar que el formulario se muestre automáticamente al inicio
+            if (!this.IsHandleCreated)
+            {
+                this.CreateHandle();
+                base.SetVisibleCore(false);
+                return;
             }
+            
+            base.SetVisibleCore(value);
         }
-        else
-        {
-            base.OnFormClosing(e);
-        }
-    }
 
-    private void BtnNewNote_Click(object? sender, EventArgs e)
-    {
-        var newNote = new StickyNoteData();
-        var noteForm = new StickyNoteForm(newNote);
-        noteForm.NoteSaved += NoteForm_NoteSaved;
-        noteForm.NoteDeleted += NoteForm_NoteDeleted;
-        
-        // Posicionar la nueva nota en una ubicación visible
-        noteForm.Location = new Point(100 + (notes.Count * 30), 100 + (notes.Count * 30));
-        noteForm.Show();
-        
-        notes.Add(newNote);
-        UpdateNotesList();
-        SaveNotes();
-    }
-
-    private void LstNotes_DoubleClick(object? sender, EventArgs e)
-    {
-        if (lstNotes?.SelectedItem is string selectedText)
+        // Sobrescribir el método para manejar el evento de minimizar
+        protected override void WndProc(ref Message m)
         {
-            var note = notes.FirstOrDefault(n => GetNoteDisplayText(n) == selectedText);
-            if (note != null)
+            const int WM_SIZE = 0x0005;
+            const int SIZE_MINIMIZED = 1;
+
+            if (m.Msg == WM_SIZE && (int)m.WParam == SIZE_MINIMIZED)
             {
-                // Verificar si ya hay una ventana abierta para esta nota
-                var openForm = Application.OpenForms.Cast<Form>()
-                    .OfType<StickyNoteForm>()
-                    .FirstOrDefault(f => f.NoteData == note);
-                
-                if (openForm != null)
+                this.Hide();
+                return;
+            }
+
+            base.WndProc(ref m);
+        }
+
+        private void SetupTrayIcon()
+        {
+            trayMenu = new ContextMenuStrip();
+            trayMenu.Items.Add("Nueva Nota", null, BtnNewNote_Click);
+            trayMenu.Items.Add("Nueva Lista de Tareas", null, BtnNewTaskList_Click);
+            trayMenu.Items.Add(new ToolStripSeparator());
+            trayMenu.Items.Add("Mostrar", null, (s, e) => { 
+                this.Show(); 
+                this.WindowState = FormWindowState.Normal;
+                this.ShowInTaskbar = true;
+                this.BringToFront();
+                this.Activate();
+            });
+            trayMenu.Items.Add("Salir", null, (s, e) => Application.Exit());
+
+            notifyIcon = new NotifyIcon
+            {
+                Icon = this.Icon ?? SystemIcons.Application,
+                Text = "Post-it Digital",
+                Visible = true,
+                ContextMenuStrip = trayMenu
+            };
+            
+            notifyIcon.DoubleClick += (s, e) => { 
+                if (this.Visible)
                 {
-                    // Si ya está abierta, traerla al frente
-                    openForm.BringToFront();
-                    openForm.Activate();
+                    this.Hide();
+                    this.ShowInTaskbar = false;
                 }
                 else
                 {
-                    // Si no está abierta, crear nueva ventana
-                    var noteForm = new StickyNoteForm(note);
-                    noteForm.NoteSaved += NoteForm_NoteSaved;
-                    noteForm.NoteDeleted += NoteForm_NoteDeleted;
+                    this.Show(); 
+                    this.WindowState = FormWindowState.Normal;
+                    this.ShowInTaskbar = true;
+                    this.BringToFront();
+                    this.Activate();
+                }
+            };
+        }
+
+        private void UpdateNotesList()
+        {
+            lstNotes?.Items.Clear();
+            foreach (var note in notes)
+            {
+                string tipo = note.Type == NoteType.TaskList ? "[Lista de tareas]" : "[Nota]";
+                string titulo = string.IsNullOrWhiteSpace(note.Title) ? "(Sin título)" : note.Title;
+                lstNotes?.Items.Add($"{tipo} {titulo}");
+            }
+        }
+
+        private void BtnNewNote_Click(object? sender, EventArgs e)
+        {
+            var newNote = new StickyNoteData();
+            var noteForm = new StickyNoteForm(newNote);
+            SetupNoteFormEvents(noteForm);
+
+            noteForm.Location = new Point(100 + (notes.Count * 30), 100 + (notes.Count * 30));
+            noteForm.Show();
+
+            notes.Add(newNote);
+            UpdateNotesList();
+            SaveNotes();
+        }
+
+        private void BtnNewTaskList_Click(object? sender, EventArgs e)
+        {
+            var newNote = new StickyNoteData { Type = NoteType.TaskList, Tasks = new List<TaskItem>() };
+            var noteForm = new TaskListNoteForm(newNote);
+            SetupNoteFormEvents(noteForm);
+
+            noteForm.Location = new Point(120 + (notes.Count * 30), 120 + (notes.Count * 30));
+            noteForm.Show();
+
+            notes.Add(newNote);
+            UpdateNotesList();
+            SaveNotes();
+        }
+
+        private void BtnDeleteNote_Click(object? sender, EventArgs e)
+        {
+            DeleteSelectedNote();
+        }
+
+        private void LstNotes_DoubleClick(object? sender, EventArgs e)
+        {
+            if (lstNotes?.SelectedItem is string selectedText)
+            {
+                var note = FindNoteByDisplayText(selectedText);
+                if (note != null)
+                {
+                    var openForm = FindExistingNoteForm(note);
+                    if (openForm != null)
+                    {
+                        openForm.BringToFront();
+                        openForm.Activate();
+                    }
+                    else
+                    {
+                        var noteForm = CreateNoteForm(note);
+                        SetupNoteFormEvents(noteForm);
+                        noteForm.Show();
+                    }
+                }
+            }
+        }
+
+        private void DeleteSelectedNote()
+        {
+            if (lstNotes?.SelectedItem is string selectedText)
+            {
+                var note = FindNoteByDisplayText(selectedText);
+                if (note != null)
+                {
+                    var result = MessageBox.Show($"¿Estás seguro de que quieres eliminar la nota '{note.Title}'?",
+                                                 "Confirmar eliminación",
+                                                 MessageBoxButtons.YesNo,
+                                                 MessageBoxIcon.Question);
+                    if (result == DialogResult.Yes)
+                    {
+                        notes.Remove(note);
+                        UpdateNotesList();
+                        SaveNotes();
+
+                        // Cerrar la ventana si está abierta
+                        var openForm = FindExistingNoteForm(note);
+                        openForm?.Close();
+                    }
+                }
+            }
+        }
+
+        private BaseNoteForm? FindExistingNoteForm(StickyNoteData note)
+        {
+            return Application.OpenForms.Cast<Form>()
+                .OfType<BaseNoteForm>()
+                .FirstOrDefault(f => f.NoteData == note);
+        }
+
+        private BaseNoteForm CreateNoteForm(StickyNoteData note)
+        {
+            return note.Type == NoteType.TaskList 
+                ? new TaskListNoteForm(note) 
+                : new StickyNoteForm(note);
+        }
+
+        private void SetupNoteFormEvents(BaseNoteForm noteForm)
+        {
+            noteForm.NoteSaved += NoteForm_NoteSaved;
+            noteForm.NoteDeleted += NoteForm_NoteDeleted;
+        }
+
+        private StickyNoteData? FindNoteByDisplayText(string displayText)
+        {
+            return notes.FirstOrDefault(n =>
+            {
+                string tipo = n.Type == NoteType.TaskList ? "[Lista de tareas]" : "[Nota]";
+                string titulo = string.IsNullOrWhiteSpace(n.Title) ? "(Sin título)" : n.Title;
+                return $"{tipo} {titulo}" == displayText;
+            });
+        }
+
+        private void ShowExistingNotes()
+        {
+            foreach (var note in notes)
+            {
+                var existingForm = FindExistingNoteForm(note);
+                if (existingForm == null)
+                {
+                    var noteForm = CreateNoteForm(note);
+                    SetupNoteFormEvents(noteForm);
+
+                    if (note.Location == Point.Empty)
+                    {
+                        note.Location = GenerateRandomLocation();
+                    }
+
+                    noteForm.Location = note.Location;
                     noteForm.Show();
                 }
             }
         }
-    }
 
-    private void LstNotes_MouseDown(object? sender, MouseEventArgs e)
-    {
-        if (e.Button == MouseButtons.Right && lstNotes != null)
+        private Point GenerateRandomLocation()
         {
-            int index = lstNotes.IndexFromPoint(e.Location);
-            if (index != ListBox.NoMatches)
-            {
-                lstNotes.SelectedIndex = index;
-                var contextMenu = new ContextMenuStrip();
-                contextMenu.Items.Add("Abrir", null, (s, args) => LstNotes_DoubleClick(s, args));
-                contextMenu.Items.Add("Eliminar", null, (s, args) => DeleteSelectedNote());
-                contextMenu.Show(lstNotes, e.Location);
-            }
+            Random rand = new Random();
+            var workingArea = Screen.PrimaryScreen?.WorkingArea ?? new Rectangle(0, 0, 1024, 768);
+            return new Point(
+                rand.Next(50, Math.Max(350, workingArea.Width - 300)),
+                rand.Next(50, Math.Max(300, workingArea.Height - 250))
+            );
         }
-    }
 
-    private void DeleteSelectedNote()
-    {
-        if (lstNotes?.SelectedItem is string selectedText)
-        {
-            var note = notes.FirstOrDefault(n => GetNoteDisplayText(n) == selectedText);
-            if (note != null)
-            {
-                var result = MessageBox.Show($"¿Estás seguro de que quieres eliminar la nota '{note.Title}'?", 
-                                           "Confirmar eliminación", 
-                                           MessageBoxButtons.YesNo, 
-                                           MessageBoxIcon.Question);
-                if (result == DialogResult.Yes)
-                {
-                    notes.Remove(note);
-                    UpdateNotesList();
-                    SaveNotes();
-                    
-                    // Cerrar la ventana si está abierta
-                    var openForm = Application.OpenForms.Cast<Form>()
-                        .OfType<StickyNoteForm>()
-                        .FirstOrDefault(f => f.NoteData == note);
-                    openForm?.Close();
-                }
-            }
-        }
-    }
-
-    private string GetNoteDisplayText(StickyNoteData note)
-    {
-        // Mostrar solo el título, o "Sin título" si está vacío
-        string title = string.IsNullOrWhiteSpace(note.Title) ? "Sin título" : note.Title.Trim();
-        
-        // Limitar la longitud del título mostrado
-        if (title.Length > 40)
-        {
-            title = title.Substring(0, 37) + "...";
-        }
-        
-        return title;
-    }
-
-    private void UpdateNotesList()
-    {
-        if (lstNotes != null)
-        {
-            lstNotes.Items.Clear();
-            lstNotes.Items.AddRange(notes.Select(GetNoteDisplayText).ToArray());
-            
-            if (lblInfo != null)
-            {
-                lblInfo.Text = $"• Total de notas: {notes.Count}\n• Doble clic para abrir • Clic derecho para opciones";
-            }
-        }
-    }
-
-    private void NoteForm_NoteSaved(object? sender, EventArgs e)
-    {
-        if (sender is StickyNoteForm form)
+        private void NoteForm_NoteSaved(object? sender, EventArgs e)
         {
             UpdateNotesList();
             SaveNotes();
         }
-    }
 
-    private void LoadNotes()
-    {
-        if (File.Exists(NotesFile))
+        private void NoteForm_NoteDeleted(object? sender, EventArgs e)
+        {
+            if (sender is BaseNoteForm form)
+            {
+                notes.Remove(form.NoteData);
+                UpdateNotesList();
+                SaveNotes();
+            }
+        }
+
+        private void LoadNotes()
         {
             try
             {
-                string json = File.ReadAllText(NotesFile);
-                var loadedNotes = System.Text.Json.JsonSerializer.Deserialize<List<StickyNoteData>>(json);
-                if (loadedNotes != null)
+                string notesFile = "sticky_notes.json";
+                if (File.Exists(notesFile))
                 {
-                    notes = loadedNotes;
+                    string json = File.ReadAllText(notesFile);
+                    notes = JsonSerializer.Deserialize<List<StickyNoteData>>(json) ?? new List<StickyNoteData>();
                 }
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"Error al cargar las notas: {ex.Message}", "Error", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                MessageBox.Show($"Error cargando notas: {ex.Message}", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                notes = new List<StickyNoteData>();
             }
         }
-    }
 
-    private void NoteForm_NoteDeleted(object? sender, EventArgs e)
-    {
-        if (sender is StickyNoteForm form)
+        private void SaveNotes()
         {
-            notes.Remove(form.NoteData);
-            UpdateNotesList();
-            SaveNotes();
+            try
+            {
+                string json = JsonSerializer.Serialize(notes, new JsonSerializerOptions { WriteIndented = true });
+                File.WriteAllText("sticky_notes.json", json);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Error guardando notas: {ex.Message}", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
         }
-    }
 
-    private void SaveNotes()
-    {
-        try
+        // Remover el método Dispose y agregar este método de limpieza
+        private void CleanupResources()
         {
-            string json = System.Text.Json.JsonSerializer.Serialize(notes, new System.Text.Json.JsonSerializerOptions 
-            { 
-                WriteIndented = true 
-            });
-            File.WriteAllText(NotesFile, json);
+            notifyIcon?.Dispose();
+            trayMenu?.Dispose();
         }
-        catch (Exception ex)
+
+        // Llamar CleanupResources en el evento FormClosing
+        protected override void OnFormClosing(FormClosingEventArgs e)
         {
-            MessageBox.Show($"Error al guardar las notas: {ex.Message}", "Error", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            // Si el usuario cierra la ventana, minimizar a la bandeja en lugar de cerrar
+            if (e.CloseReason == CloseReason.UserClosing)
+            {
+                e.Cancel = true;
+                this.Hide();
+                this.ShowInTaskbar = false;
+                
+                // Mostrar notificación la primera vez
+                if (notifyIcon != null && notifyIcon.Visible)
+                {
+                    notifyIcon.BalloonTipTitle = "Post-it Digital";
+                    notifyIcon.BalloonTipText = "La aplicación se ha minimizado a la bandeja del sistema.";
+                    notifyIcon.BalloonTipIcon = ToolTipIcon.Info;
+                    notifyIcon.ShowBalloonTip(3000);
+                }
+                return;
+            }
+            
+            CleanupResources();
+            base.OnFormClosing(e);
         }
     }
 }
